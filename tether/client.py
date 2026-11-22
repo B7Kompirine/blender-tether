@@ -168,9 +168,10 @@ def request(selector, op, timeout=60, **args):
 
 
 def _file_path(path, cwd, what):
-    """Absolute path. A relative path is looked up in cwd first, then relative to this process's cwd."""
+    """Absolute path. A relative path is looked up in cwd first, then in the folders of $TETHER_SCRIPT_DIRS (separated by os.pathsep), then relative to this process's cwd."""
     p = Path(path)
-    candidates = [p] if p.is_absolute() else [*([Path(cwd) / p] if cwd else []), Path.cwd() / p]
+    extra = [Path(d) for d in os.environ.get("TETHER_SCRIPT_DIRS", "").split(os.pathsep) if d.strip()]
+    candidates = [p] if p.is_absolute() else [*([Path(cwd) / p] if cwd else []), *(d / p for d in extra), Path.cwd() / p]
     for c in candidates:
         if c.is_file():
             return str(c.resolve())

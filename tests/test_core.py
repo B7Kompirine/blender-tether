@@ -126,6 +126,15 @@ def script_runner():
         except client.TetherError as e:
             error = str(e)
         check("a missing script: the places looked in are listed", "script not found: no_such.py" in error and str(d1) in error, error)
+        lib = TMP / "script_lib"
+        lib.mkdir()
+        (lib / "lib_script.py").write_text("result = 'from lib'\n", encoding="utf-8")
+        os.environ["TETHER_SCRIPT_DIRS"] = str(lib)
+        try:
+            y = client.run("example", file="lib_script.py")
+        finally:
+            del os.environ["TETHER_SCRIPT_DIRS"]
+        check("a relative script is also looked up in the folders of TETHER_SCRIPT_DIRS", y["ok"] and y["result"] == "from lib" and Path(y["file"]) == (lib / "lib_script.py").resolve(), y)
         (d1 / "grep.py").write_text("for i in range(5):\n    print('FRAME' if i % 2 == 0 else 'info', i)\n", encoding="utf-8")
         y = client.run("example", file=str(d1 / "grep.py"), grep="^FRAME")
         check("grep: only matching lines are kept; matched/total are reported",

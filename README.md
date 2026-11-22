@@ -76,6 +76,7 @@ A typical loop for an agent: `status` → `open` → `api_search` → `run` → 
 |---|---|
 | `TETHER_BLENDER` | Full path of the Blender executable. |
 | `TETHER_ADDONS` | Comma-separated add-ons the headless daemon enables, for example `Sollumz`. Default: none. |
+| `TETHER_SCRIPT_DIRS` | Extra folders (separated by `;` on Windows, `:` elsewhere) in which a relative `file` of `run` is looked up, after `cwd`. |
 | `TETHER_HOME` | State folder. Default `~/.tether`. |
 | `TETHER_STATS=0` | Turns off the call log. It stores counts and timings only, never code or output. |
 | `SKETCHFAB_TOKEN`, `POLYPIZZA_KEY` | Keys for the two providers that need them. They can also be put in `~/.tether/assets.json` as `sketchfab_token` and `polypizza_key`. Never paste a key into a chat. |
