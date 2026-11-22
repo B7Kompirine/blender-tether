@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "blender-tether"
+version = "0.1.0"
+description = "MCP server that lets an AI agent drive Blender, headless or live, and check its own work: Python execution, scene reports, multi-angle images, asset import."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Muto Systems" }]
+keywords = ["blender", "mcp", "model-context-protocol", "ai-agent", "3d", "automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+dependencies = ["mcp>=1.28", "Pillow>=10"]
+
+[project.urls]
+Homepage = "https://github.com/B7Kompirine/blender-tether"
+Issues = "https://github.com/B7Kompirine/blender-tether/issues"
+
+[project.scripts]
+tether = "tether.client:main"
+tether-mcp = "tether.mcp_server:main"
+
+[tool.setuptools.packages.find]
+include = ["tether*"]
+
+[tool.setuptools.package-data]
+"tether.agent" = ["*.js"]
