@@ -110,7 +110,7 @@ python tests/run_tests.py --mcp --blender     # plus a real headless Blender (ab
 python tests/run_tests.py --blender --gui     # also a windowed Blender: a window opens and takes focus
 ```
 
-The Sollumz checks run only when that add-on is available.
+The Blender groups analyse image pixels, so they need numpy: `pip install ".[test]"` from a checkout. The Sollumz checks run only when that add-on is available.
 
 ## Limits
 

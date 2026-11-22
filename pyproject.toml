@@ -20,6 +20,9 @@ classifiers = [
 ]
 dependencies = ["mcp>=1.28,<2", "Pillow>=10"]
 
+[project.optional-dependencies]
+test = ["numpy"]
+
 [project.urls]
 Homepage = "https://github.com/B7Kompirine/blender-tether"
 Issues = "https://github.com/B7Kompirine/blender-tether/issues"
