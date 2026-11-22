@@ -94,6 +94,31 @@ A typical loop for an agent: `status` → `open` → `api_search` → `run` → 
 
 These are tool-side times. Inside an agent every call also pays the agent runtime's own overhead, which in my sessions was tens to hundreds of milliseconds, so the saving shows up in jobs that would otherwise start Blender, not in a single call. The runs differ from each other by more than the noise inside one run, so treat single numbers with care.
 
+## Compared with blender-mcp
+
+[blender-mcp](https://pypi.org/project/blender-mcp/) (the "MCP for Blender" add-on, version 1.8 here) is the established tool for the same job. `python tools/compare.py` drives both through the same MCP stdio harness with the same code. Three runs on the machine above (after the speed fixes), the range of per-run medians, both tools attached to a windowed Blender unless stated:
+
+| | Tether | blender-mcp |
+|---|---|---|
+| Needs a Blender window | No: headless daemon, ready in 2.5 to 2.8 s. A window is optional (4.2 to 4.9 s) | Yes: a Blender with the add-on running (3.7 to 4.1 s) |
+| `print(1 + 1)` round trip | 12 to 23 ms | 54 ms |
+| Scene read (text report / JSON) | 21 to 28 ms | 53 to 54 ms |
+| Build a 40-object scene with one call | 74 to 306 ms | 74 to 141 ms |
+| Viewport image, 1024 px | 66 to 83 ms | 86 to 123 ms |
+| Several angles in one image, headless | 80 to 90 ms | not available |
+| Error answer | one line plus a line-numbered trace | JSON wrapped in a "communication error" message |
+| Poly Haven, Sketchfab, Poly Pizza | yes, CC0 by default (also ambientCG) | yes |
+| Generative 3D (Hyper3D, Hunyuan3D) | no | yes |
+| Sollumz / GTA V export checks | yes | no |
+
+What this does and does not show:
+
+- Per call, Tether is faster on code and scene reads in a windowed Blender: the other add-on hands commands to Blender's main thread on a 50 ms timer, which sets a floor of about 50 ms per call. Viewport images are about the same (Tether slightly ahead in these runs). Building the scene is a tie within the noise.
+- The larger difference is structural. Tether can start and use its own headless Blender, and its `scene` report and multi-angle `view` let an agent check its own work. blender-mcp has generative 3D and a much larger user base, which Tether does not.
+- The two tools return different content (a text report is not a JSON dump, a window screenshot is not a four-angle image), so read the times together with what comes back.
+- Asset downloads are network bound: about 2.5 s for Tether and 2.1 s for blender-mcp for the same Poly Haven texture, one run each. The blender-mcp asset search failed on this machine with an argument mismatch between the server and the installed add-on, so it is not in the table.
+- One machine, one Blender version, a game running in the background, so absolute numbers will differ on yours. Tether's headless `print(1 + 1)` varied from 5 to 31 ms between runs.
+
 ## Security
 
 Tether listens on `127.0.0.1` only, on a port the OS chooses. Each agent has a random token that is stored in `~/.tether/apps/<app>-<pid>.json`. Anyone who can read that file can run code in that Blender, exactly as the user who started it can, so treat it like any local code execution. The client verifies a registry entry against the process id and creation time before connecting, and removes stale ones. Asset downloads accept HTTPS from allow-listed hosts only, including after redirects, and are capped in size and time.

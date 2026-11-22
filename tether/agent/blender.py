@@ -459,7 +459,7 @@ def _pump():
         a.pump()
     except BaseException as e:                    # if a timer raises, Blender removes it: the bridge would die silently
         print(f"[tether] pump error: {e!r}")
-    return 0.01 if a.queue.qsize() else 0.02
+    return 0.002 if a.queue.qsize() else 0.005
 
 
 def start_gui():

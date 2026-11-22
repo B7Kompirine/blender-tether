@@ -148,11 +148,13 @@ def view(app: str, width: int = 1024, area: str = "", mode: str = "", shading: s
                                    distance=distance, frames=frames, frame_count=frame_count, look=look, image=image)
     except client.TetherError as e:
         _fail(e)
-    im = PILImage.open(io.BytesIO(png))
-    im.thumbnail((width, width))
-    buf = io.BytesIO()
-    im.save(buf, "PNG")
-    return [Image(data=buf.getvalue(), format="png"), *([caption] if caption else [])]
+    im = PILImage.open(io.BytesIO(png))                 # reads the header only
+    if max(im.size) > width:                            # only a file or Render Result image can be larger than asked
+        im.thumbnail((width, width))
+        buf = io.BytesIO()
+        im.save(buf, "PNG")
+        png = buf.getvalue()
+    return [Image(data=png, format="png"), *([caption] if caption else [])]
 
 
 def _xyz(v):
