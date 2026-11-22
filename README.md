@@ -100,6 +100,8 @@ These are tool-side times. Inside an agent every call also pays the agent runtim
 
 ## Compared with blender-mcp
 
+![comparison](docs/compare.png)
+
 [blender-mcp](https://pypi.org/project/blender-mcp/) (the "MCP for Blender" add-on, version 1.8 here) is the established tool for the same job. `python tools/compare.py` drives both through the same MCP stdio harness with the same code. Three runs on the machine above (after the speed fixes), the range of per-run medians, both tools attached to a windowed Blender unless stated:
 
 | | Tether | blender-mcp |
