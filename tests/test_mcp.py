@@ -31,7 +31,8 @@ async def _generic(p):
 
             def hint(name, key):
                 return by[name].get("annotations", {}).get(key)
-            check("MCP: 9 tools", sorted(by) == sorted(["status", "run", "api_search", "view", "open", "close", "scene", "asset_search", "asset_import"]), sorted(by))
+            check("MCP: 11 tools", sorted(by) == sorted(["status", "run", "api_search", "view", "open", "close", "scene", "asset_search", "asset_import",
+                                                          "generate_start", "generate_status"]), sorted(by))
             check("MCP: no 'title' labels in the tool schemas (they cost tokens every session), parameter names and types are intact",
                   '"title"' not in json.dumps([t["inputSchema"] for t in tools]) and by["view"]["inputSchema"]["properties"]["shading"]["type"] == "string"
                   and "app" in by["run"]["inputSchema"]["required"])

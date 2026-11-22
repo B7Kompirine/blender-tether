@@ -1,5 +1,6 @@
-"""Tether MCP server (an AI agent -> local apps): status, open, close, run, api_search, scene, view, asset_search, asset_import. The work is done by
-tether.client and tether.assets; this file only holds the tool definitions and the output format ('title' labels are removed from the schemas: tokens).
+"""Tether MCP server (an AI agent -> local apps): status, open, close, run, api_search, scene, view, asset_search, asset_import, generate_start,
+generate_status. The work is done by tether.client, tether.assets and tether.generate; this file only holds the tool definitions and the output format
+('title' labels are removed from the schemas: tokens).
 
 Usage: claude mcp add tether -- python -m tether.mcp_server
 """
@@ -11,9 +12,9 @@ from pathlib import Path
 
 if __package__ in (None, ""):          # started as a script: python tether/mcp_server.py
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from tether import assets, client
+    from tether import assets, client, generate
 else:
-    from . import assets, client
+    from . import assets, client, generate
 try:                                    # SDK 2.x renamed FastMCP to MCPServer
     from mcp.server.mcpserver import Image, MCPServer
     from mcp.server.mcpserver.exceptions import ToolError
@@ -214,16 +215,42 @@ def asset_import(app: str, source: str, id: str, kind: str = "", resolution: str
     texture: a Principled material named 'source_id' (kept even if it is outside the scene); apply_to=['Object'] replaces those meshes' material
     (warns if there are no UVs). hdri: assigned as a new world (the old one is kept). resolution: 1k (default), 2k, 4k, 8k; format: model gltf/fbx,
     texture jpg/png, hdri hdr/exr. accept_license: take a non-CC0 asset knowingly. Returns: bounding box, tris, materials, file, license; look at it
-    with view afterwards. The root gets the properties asset_source/asset_license/asset_attribution."""
+    with view afterwards. The root gets the properties asset_source/asset_license/asset_attribution. A generated model: source='rodin' or 'hunyuan',
+    id = the job from generate_start (it must be done: see generate_status); target_size is advisable."""
     try:
         target_size, location = assets.placement(target_size, location)         # a bad number is rejected before downloading
-        m = assets.download(source, id, kind, resolution, format, accept_license)
+        m = generate.fetch(id) if str(source).lower() in generate.PROVIDERS else assets.download(source, id, kind, resolution, format, accept_license)
         r = client.call(app, "import_asset", {"kind": m["kind"], "name": m["id"], "file": m.get("main_file", ""), "maps": m.get("maps"),
                                                "source": m["source"], "license": m["license"], "attribution": m["attribution"], "target_size": target_size,
                                                "location": location, "snap_to_ground": snap_to_ground, "apply_to": apply_to}, timeout=300)["result"]
     except (assets.AssetError, client.TetherError) as e:
         _fail(e)
     return _asset_report(m, r, target_size)
+
+
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True), structured_output=False)
+def generate_start(provider: str, prompt: str = "", images: list[str] | None = None, tier: str = "", pbr: bool = False, face_count: int = 0,
+                   accept_cost: bool = False) -> str:
+    """Starts generating a 3D model from text or pictures at a paid provider: rodin (Hyper3D Rodin; RODIN_API_KEY) or hunyuan (Tencent Hunyuan3D Pro;
+    TENCENT_SECRET_ID and TENCENT_SECRET_KEY). Each job spends the provider's credits, so without accept_cost=True NOTHING is sent: the answer shows the job
+    and its cost; ask the user before passing accept_cost=True. prompt (English or Chinese) or images (local .jpg/.png/.webp paths; rodin up to 5, hunyuan 1,
+    and hunyuan takes a prompt or an image, not both). rodin: tier (default Gen-2.5-Low; Gen-2.5-Medium/High need a full API plan). hunyuan: pbr (PBR
+    materials, +credits), face_count (3000 to 1500000, +credits). It takes minutes: poll generate_status, then asset_import(source=provider, id=job).
+    Models are generated in the provider's cloud; the license is the provider's terms."""
+    try:
+        return generate.start(provider, prompt, images, tier, pbr, face_count, accept_cost)["text"]
+    except assets.AssetError as e:
+        _fail(e)
+
+
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True), structured_output=False)
+def generate_status(job: str) -> str:
+    """Asks the provider once how a generate_start job is doing: waiting, running, done or failed. When it is done the model is downloaded (once, into the
+    cache); then bring it into Blender with asset_import(source='rodin' or 'hunyuan', id=job, target_size=metres). Poll no more often than every 10 seconds."""
+    try:
+        return generate.status(job)["text"]
+    except assets.AssetError as e:
+        _fail(e)
 
 
 @_tool(name="open", annotations=LAUNCH)

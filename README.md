@@ -14,6 +14,7 @@ to click and no add-on to install for the common case. It can also attach to a B
 - **Runs Python with a persistent namespace.** Define a function once and call it by name. `bpy`, `bmesh`, `mathutils`, `numpy` and friends are already there. Stale `bpy` references are dropped when a file loads or undo runs, instead of crashing Blender.
 - **Lets the agent verify its work.** `scene` returns a text report (sizes, ground contact, topology, weights, modifiers, animation range...). `view` renders the scene offscreen, in the background too, as one PNG with several angles, shading modes (solid, wireframe, xray, texture, material) or an animation strip.
 - **Finds and imports assets.** `asset_search` and `asset_import` work with Poly Haven, ambientCG, Sketchfab and Poly Pizza. CC0 only by default. Downloads are HTTPS-only, from allow-listed hosts, capped in size, hash-checked and cached.
+- **Generates 3D models** from a prompt or pictures with Hyper3D Rodin or Tencent Hunyuan3D, with your own API keys. Nothing is sent, and no credits are spent, until the agent passes `accept_cost=True`.
 - **Fails loudly.** Helpers such as `tether.select` raise with the reason where raw Blender calls silently do nothing (a locked object, a hidden collection, an export that says `FINISHED` and writes no file).
 - **Optional GTA V / FiveM checks** through the Sollumz add-on (see below).
 
@@ -60,7 +61,9 @@ Any client that reads a JSON config:
 | `scene` | Read-only scene report. Fields: location, size, ground, rotation, scale, parent, children, hidden, details, materials, modifiers, animation, topology, weights, gta, settings. |
 | `view` | One PNG of the scene: `angles`, `shading`, `target`, `distance`, `frames`, `look`, `image`. |
 | `asset_search` | Searches models, PBR textures and HDRIs. |
-| `asset_import` | Downloads an asset and brings it into Blender with a target size, a license note and rollback on failure. |
+| `asset_import` | Downloads an asset and brings it into Blender with a target size, a license note and rollback on failure. Also imports a finished generated model (`source` `rodin` or `hunyuan`, `id` = the job). |
+| `generate_start` | Starts a text-to-3D or image-to-3D job at Rodin or Hunyuan. Without `accept_cost=True` it only shows what it would send and what it costs. |
+| `generate_status` | Polls a job once and, when it is done, downloads the model. |
 
 A typical loop for an agent: `status` → `open` → `api_search` → `run` → `scene` + `view` → fix → `scene` + `view`.
 
@@ -80,6 +83,7 @@ A typical loop for an agent: `status` → `open` → `api_search` → `run` → 
 | `TETHER_HOME` | State folder. Default `~/.tether`. |
 | `TETHER_STATS=0` | Turns off the call log. It stores counts and timings only, never code or output. |
 | `SKETCHFAB_TOKEN`, `POLYPIZZA_KEY` | Keys for the two providers that need them. They can also be put in `~/.tether/assets.json` as `sketchfab_token` and `polypizza_key`. Never paste a key into a chat. |
+| `RODIN_API_KEY`, `TENCENT_SECRET_ID`, `TENCENT_SECRET_KEY` | Keys for generative 3D (Hyper3D Rodin; Tencent Cloud for Hunyuan3D). Also readable from `~/.tether/assets.json` as `rodin_key`, `tencent_secret_id`, `tencent_secret_key`. |
 
 ## Measured numbers
 
@@ -108,13 +112,13 @@ These are tool-side times. Inside an agent every call also pays the agent runtim
 | Several angles in one image, headless | 80 to 90 ms | not available |
 | Error answer | one line plus a line-numbered trace | JSON wrapped in a "communication error" message |
 | Poly Haven, Sketchfab, Poly Pizza | yes, CC0 by default (also ambientCG) | yes |
-| Generative 3D (Hyper3D, Hunyuan3D) | no | yes |
+| Generative 3D (Hyper3D, Hunyuan3D) | yes, with your own keys (not yet run against the live services, see below) | yes |
 | Sollumz / GTA V export checks | yes | no |
 
 What this does and does not show:
 
 - Per call, Tether is faster on code and scene reads in a windowed Blender: the other add-on hands commands to Blender's main thread on a 50 ms timer, which sets a floor of about 50 ms per call. Viewport images are about the same (Tether slightly ahead in these runs). Building the scene is a tie within the noise.
-- The larger difference is structural. Tether can start and use its own headless Blender, and its `scene` report and multi-angle `view` let an agent check its own work. blender-mcp has generative 3D and a much larger user base, which Tether does not.
+- The larger difference is structural. Tether can start and use its own headless Blender, and its `scene` report and multi-angle `view` let an agent check its own work. blender-mcp has a much larger user base, which Tether does not.
 - The two tools return different content (a text report is not a JSON dump, a window screenshot is not a four-angle image), so read the times together with what comes back.
 - Asset downloads are network bound: about 2.5 s for Tether and 2.1 s for blender-mcp for the same Poly Haven texture, one run each. The blender-mcp asset search failed on this machine with an argument mismatch between the server and the installed add-on, so it is not in the table.
 - One machine, one Blender version, a game running in the background, so absolute numbers will differ on yours. Tether's headless `print(1 + 1)` varied from 5 to 31 ms between runs.
@@ -122,6 +126,21 @@ What this does and does not show:
 ## Security
 
 Tether listens on `127.0.0.1` only, on a port the OS chooses. Each agent has a random token that is stored in `~/.tether/apps/<app>-<pid>.json`. Anyone who can read that file can run code in that Blender, exactly as the user who started it can, so treat it like any local code execution. The client verifies a registry entry against the process id and creation time before connecting, and removes stale ones. Asset downloads accept HTTPS from allow-listed hosts only, including after redirects, and are capped in size and time.
+
+## Generative 3D
+
+```text
+generate_start provider=rodin prompt="a wooden barrel"           -> NOT SENT, shows the cost
+generate_start provider=rodin prompt="a wooden barrel" accept_cost=true  -> job rodin-<id>
+generate_status job=rodin-<id>                                    -> waiting / running / done (downloads the glb)
+asset_import app=blender source=rodin id=rodin-<id> target_size=1.0
+```
+
+- **Rodin** (`rodin`): text or up to 5 pictures, `tier` default `Gen-2.5-Low` (the higher tiers need a full API plan). About 0.5 credits per job.
+- **Hunyuan3D Pro** (`hunyuan`): a prompt or one picture, `pbr` and `face_count` optional. 20 credits per job plus extras (about 2 to 2.4 CNY), a free package of 100 credits can be claimed once in the Tencent console.
+- The result is a glb, downloaded once into `~/.tether/assets/generated/<job>`. The license is the provider's terms, not CC0. Result files come from whichever public HTTPS host the provider's API names, so redirects, private addresses and size are checked.
+- Jobs live in `~/.tether/jobs`, so a job can be polled from a later session. Hunyuan's result links are valid for 24 hours.
+- Hunyuan Rapid, multi-view input and the other Tencent 3D actions are not supported.
 
 ## GTA V / FiveM (optional)
 
@@ -132,7 +151,7 @@ If you work with GTA V assets through the [Sollumz](https://github.com/Sollumz/S
 ```powershell
 python tests/run_tests.py                     # engine, client, scripts, asset sources against a fake server (no Blender, no network)
 python tests/run_tests.py --mcp               # plus the MCP server through a stdio client
-python tests/run_tests.py --mcp --blender     # plus a real headless Blender (383 checks with Sollumz installed, about two minutes)
+python tests/run_tests.py --mcp --blender     # plus a real headless Blender (412 checks with Sollumz installed, about two minutes)
 python tests/run_tests.py --blender --gui     # also a windowed Blender: a window opens and takes focus
 ```
 
@@ -144,7 +163,7 @@ The Blender groups analyse image pixels, so they need numpy: `pip install ".[tes
 - Tested with Blender 5.2.4 LTS only.
 - A script that registers add-ons, classes or handlers needs a fresh process (`close`, then `open`).
 - While you are inside a modal operator in a windowed Blender, jobs wait until it ends.
-- Generating 3D models from a prompt is not part of Tether.
+- Generative 3D has been tested against a fake server that follows the providers' documented request and response shapes, and the Hunyuan request signature matches the official Tencent SDK byte for byte. It has not been run against the live Rodin or Hunyuan services yet: expect to fix small things on the first real job.
 
 ## License
 

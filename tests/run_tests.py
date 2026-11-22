@@ -9,6 +9,7 @@ import sys
 import harness
 import test_assets
 import test_core
+import test_generate
 
 
 def main():
@@ -20,6 +21,7 @@ def main():
     try:
         test_core.run_all()
         test_assets.run_all()
+        test_generate.run_all()
         if a.mcp:
             import test_mcp
             test_mcp.run_generic()

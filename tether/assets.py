@@ -33,6 +33,7 @@ ALLOWED = {"polyhaven": {"api.polyhaven.com", "dl.polyhaven.org", "cdn.polyhaven
            "ambientcg": {"ambientcg.com", "acg-download.struffelproductions.com", "acg-media.struffelproductions.com"},
            "sketchfab": {"api.sketchfab.com", "media.sketchfab.com", "sketchfab-prod-media.s3.amazonaws.com"},
            "polypizza": {"api.poly.pizza", "static.poly.pizza"}}
+HOST_CHECKS = {}                      # source -> function(hostname): sources whose hosts are decided by a function (generate.py)
 LOCAL_TEST = False                    # True: http://127.0.0.1 is accepted (only the tests' fake server)
 JSON_LIMIT = 8 << 20
 PREVIEW_LIMIT = 3 << 20
@@ -66,7 +67,10 @@ def _check_url(url, source):
     p = urllib.parse.urlsplit(url)
     if p.scheme != "https" and not (LOCAL_TEST and p.scheme == "http" and p.hostname == "127.0.0.1"):
         raise AssetError(f"{source}: only https addresses are opened: {_short(url)}")
-    if p.hostname not in ALLOWED[source]:
+    if source in HOST_CHECKS:
+        if not HOST_CHECKS[source](p.hostname):
+            raise AssetError(f"{source}: host '{p.hostname}' is not allowed")
+    elif p.hostname not in ALLOWED[source]:
         raise AssetError(f"{source}: host '{p.hostname}' is not allowed (allowed: {', '.join(sorted(ALLOWED[source]))})")
 
 
@@ -79,9 +83,9 @@ class _Redirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _open(url, source, headers=None, timeout=REQUEST_S):
+def _open(url, source, headers=None, timeout=REQUEST_S, data=None):
     _check_url(url, source)
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
+    request = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT, **(headers or {})})
     try:
         return urllib.request.build_opener(_Redirect(source)).open(request, timeout=timeout)
     except urllib.error.HTTPError as e:
@@ -90,17 +94,17 @@ def _open(url, source, headers=None, timeout=REQUEST_S):
         raise AssetError(f"{source}: connection error ({getattr(e, 'reason', e)}) ({_short(url)})") from None
 
 
-def _fetch(url, source, headers=None, cap=JSON_LIMIT):
-    with _open(url, source, headers) as r:
+def _fetch(url, source, headers=None, cap=JSON_LIMIT, data=None):
+    with _open(url, source, headers, data=data) as r:
         data = r.read(cap + 1)
     if len(data) > cap:
         raise AssetError(f"{source}: the response is larger than {cap >> 20} MB ({_short(url)})")
     return data
 
 
-def _json(url, source, headers=None):
+def _json(url, source, headers=None, data=None):
     try:
-        return json.loads(_fetch(url, source, headers))
+        return json.loads(_fetch(url, source, headers, data=data))
     except ValueError:
         raise AssetError(f"{source}: the response is not JSON ({_short(url)})") from None
 
