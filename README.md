@@ -1,3 +1,5 @@
+![blender-tether: headless, live window, verified](docs/cover.png)
+
 # blender-tether
 
 Let an AI agent drive Blender, headless or live, and check its own work.
