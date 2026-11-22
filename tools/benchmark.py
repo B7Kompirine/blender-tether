@@ -89,7 +89,7 @@ class Session:
         ms = (time.perf_counter() - t) * 1000
         text = "\n".join(c.text for c in y.content if c.type == "text")
         images = [Image.open(io.BytesIO(base64.b64decode(c.data))).convert("RGB") for c in y.content if c.type == "image"]
-        if y.isError:
+        if getattr(y, "is_error", None) or getattr(y, "isError", None):         # SDK 2.x / SDK 1.x attribute name
             raise RuntimeError(f"{name}: {text[:300]}")
         return text, images, ms
 

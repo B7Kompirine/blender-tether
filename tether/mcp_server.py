@@ -3,6 +3,7 @@ tether.client and tether.assets; this file only holds the tool definitions and t
 
 Usage: claude mcp add tether -- python -m tether.mcp_server
 """
+import functools
 import io
 import os
 import sys
@@ -13,7 +14,12 @@ if __package__ in (None, ""):          # started as a script: python tether/mcp_
     from tether import assets, client
 else:
     from . import assets, client
-from mcp.server.fastmcp import FastMCP, Image
+try:                                    # SDK 2.x renamed FastMCP to MCPServer
+    from mcp.server.mcpserver import Image, MCPServer
+    from mcp.server.mcpserver.exceptions import ToolError
+except ImportError:                     # SDK 1.x
+    from mcp.server.fastmcp import FastMCP as MCPServer, Image
+    from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from PIL import Image as PILImage
 
@@ -37,17 +43,31 @@ INSTRUCTIONS = (
     "• Instead of the old 'blender -b X.blend --python b.py -- a': run(file='b.py', args=['a'], cwd=..., blend='X.blend') on a background agent; "
     "narrow long output with grep='regex'.")
 
-mcp = FastMCP("tether", instructions=INSTRUCTIONS)
+mcp = MCPServer("tether", instructions=INSTRUCTIONS)
 READ = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 WRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False)
 LAUNCH = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False)
+
+
+def _tool(**options):
+    """mcp.tool(**options) that gives the model the message of every exception, as SDK 1.x does: SDK 2.x passes on only the message of a ToolError."""
+    def register(fn):
+        @functools.wraps(fn)
+        def call(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except Exception as e:
+                raise ToolError(str(e)) from e
+        mcp.tool(**options)(call)
+        return fn
+    return register
 
 
 def _fail(e):
     raise RuntimeError(str(e)) from None
 
 
-@mcp.tool(annotations=READ)
+@_tool(annotations=READ)
 def status() -> dict:
     """Running apps: selector ('name#pid'), mode, version, busy or not, whether a modal operator is running, capabilities. Call this first."""
     running = []
@@ -60,7 +80,7 @@ def status() -> dict:
     return {"running": running, "launchable": list(client.LAUNCHERS)}
 
 
-@mcp.tool(annotations=WRITE)
+@_tool(annotations=WRITE)
 def run(app: str, code: str = "", file: str = "", args: list[str] | None = None, fresh: bool | None = None, reset: bool = False,
         timeout: int = 0, cwd: str = "", blend: str = "", clean: bool = False, env: dict[str, str] | None = None, grep: str = "") -> str:
     """Runs code in the app's own language (Blender: Python; bpy, bmesh, mathutils ready). The namespace persists (reset=True clears it, fresh=True makes
@@ -85,7 +105,7 @@ def run(app: str, code: str = "", file: str = "", args: list[str] | None = None,
     return text
 
 
-@mcp.tool(annotations=READ)
+@_tool(annotations=READ)
 def api_search(app: str, query: str) -> str:
     """Searches the app's API from the running version; use it before writing code. Blender: bpy.ops and bpy.types, open add-ons included. An exact
     name ('bpy.ops.mesh.primitive_cube_add') dumps the parameters and enum values."""
@@ -95,7 +115,7 @@ def api_search(app: str, query: str) -> str:
         _fail(e)
 
 
-@mcp.tool(annotations=READ)
+@_tool(annotations=READ)
 def scene(app: str, fields: list[str] | None = None, query: str = "", root: str = "", limit: int = 20) -> str:
     """Scene report (read-only): the header has object/type counts, active, selected, mode; then fields per object (default: top-level objects,
     location+size+children+hidden). fields: location, size (world box including children), ground (ok/floating/below), rotation, scale, parent, children,
@@ -109,7 +129,7 @@ def scene(app: str, fields: list[str] | None = None, query: str = "", root: str 
         _fail(e)
 
 
-@mcp.tool(annotations=READ, structured_output=False)
+@_tool(annotations=READ, structured_output=False)
 def view(app: str, width: int = 1024, area: str = "", mode: str = "", shading: str = "", target: list[str] | None = None,
          angles: list[str | list[float]] | None = None, distance: float = 0, frames: list[int] | None = None, frame_count: int = 0,
          look: str | list[float] | None = None, image: str = "") -> list:
@@ -164,7 +184,7 @@ def _asset_report(m, r, target_size):
     return "\n".join(s)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True), structured_output=False)
+@_tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True), structured_output=False)
 def asset_search(source: str = "all", query: str = "", kind: str = "", category: str = "", license: str = "cc0", limit: int = 10,
                  attrs: dict[str, str] | None = None, min_size_m: float = 0, max_faces: int = 0, animated: bool = False, previews: int = 0) -> list:
     """Searches ready-made 3D assets on the internet: models, PBR textures, HDRIs. source: all (default, in parallel), polyhaven (all CC0, no key), ambientcg
@@ -183,7 +203,7 @@ def asset_search(source: str = "all", query: str = "", kind: str = "", category:
         _fail(e)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=True), structured_output=False)
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=True), structured_output=False)
 def asset_import(app: str, source: str, id: str, kind: str = "", resolution: str = "1k", format: str = "", target_size: float = 0,
                  location: list[float] | None = None, snap_to_ground: bool = True, apply_to: list[str] | None = None, accept_license: bool = False) -> str:
     """Downloads a found asset and brings it into Blender (the download happens on this computer, from allow-listed hosts, with a size cap, into a
@@ -204,7 +224,7 @@ def asset_import(app: str, source: str, id: str, kind: str = "", resolution: str
     return _asset_report(m, r, target_size)
 
 
-@mcp.tool(name="open", annotations=LAUNCH)
+@_tool(name="open", annotations=LAUNCH)
 def open_app(app: str, file: str = "", background: bool = False, clean: bool | None = None, addons: list[str] | None = None) -> dict:
     """Starts the app outside the caller's container and waits for its agent. Returns: selector, pid, mode, version, startup_s (seconds).
     Blender: background=True is a headless daemon: the factory scene (cube, camera, light), no user settings and no add-ons unless addons=['Name', ...]
@@ -217,7 +237,7 @@ def open_app(app: str, file: str = "", background: bool = False, clean: bool | N
         _fail(e)
 
 
-@mcp.tool(annotations=WRITE)
+@_tool(annotations=WRITE)
 def close(app: str) -> str:
     """Closes only a background agent. The user closes a windowed Blender; close a window you opened with open only by calling
     bpy.ops.wm.quit_blender() through run (the connection drops, which is not counted as an error)."""

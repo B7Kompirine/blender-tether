@@ -13,29 +13,36 @@ def _params():
                                  env={"TETHER_HOME": str(TMP), "TETHER_STATS_DIR": str(TMP / "stats")})
 
 
+def _wire(model):
+    """The protocol form (isError, inputSchema, mimeType...) of an SDK result: SDK 1.x names the Python attributes like that, SDK 2.x in snake_case."""
+    return model.model_dump(by_alias=True, exclude_none=True)
+
+
 async def _generic(p):
     from mcp import ClientSession
     from mcp.client.stdio import stdio_client
     async with stdio_client(_params()) as (read, write):
         async with ClientSession(read, write) as o:
             await o.initialize()
-            tools = (await o.list_tools()).tools
-            size = sum(len(json.dumps(t.model_dump(exclude_none=True), ensure_ascii=False)) for t in tools)
+            tools = [_wire(t) for t in (await o.list_tools()).tools]
+            size = sum(len(json.dumps(t, ensure_ascii=False)) for t in tools)
             print(f"      tool definitions: {len(tools)} tools, {size} characters (≈{size // 4} tokens, a characters/4 estimate)")
-            by = {t.name: t for t in tools}
+            by = {t["name"]: t for t in tools}
+
+            def hint(name, key):
+                return by[name].get("annotations", {}).get(key)
             check("MCP: 9 tools", sorted(by) == sorted(["status", "run", "api_search", "view", "open", "close", "scene", "asset_search", "asset_import"]), sorted(by))
             check("MCP: no 'title' labels in the tool schemas (they cost tokens every session), parameter names and types are intact",
-                  '"title"' not in json.dumps([t.inputSchema for t in tools]) and by["view"].inputSchema["properties"]["shading"]["type"] == "string"
-                  and "app" in by["run"].inputSchema["required"])
+                  '"title"' not in json.dumps([t["inputSchema"] for t in tools]) and by["view"]["inputSchema"]["properties"]["shading"]["type"] == "string"
+                  and "app" in by["run"]["inputSchema"]["required"])
             check("MCP: scene and asset_search are marked read-only (no permission prompt); asset_search/asset_import reach the outside world (openWorld), asset_import is not read-only",
-                  all(by[n].annotations is not None for n in ("scene", "asset_search", "asset_import"))
-                  and by["scene"].annotations.readOnlyHint is True and by["asset_search"].annotations.readOnlyHint is True
-                  and by["asset_search"].annotations.openWorldHint is True and by["asset_import"].annotations.openWorldHint is True
-                  and by["asset_import"].annotations.readOnlyHint is False and by["run"].annotations.openWorldHint is False)
+                  hint("scene", "readOnlyHint") is True and hint("asset_search", "readOnlyHint") is True
+                  and hint("asset_search", "openWorldHint") is True and hint("asset_import", "openWorldHint") is True
+                  and hint("asset_import", "readOnlyHint") is False and hint("run", "openWorldHint") is False)
 
             async def call(name, **a):
-                y = await o.call_tool(name, a)
-                return y.isError, (y.content[0].text if y.content else "")
+                y = _wire(await o.call_tool(name, a))
+                return y.get("isError", False), (y["content"][0].get("text", "") if y.get("content") else "")
             e, m = await call("status")
             check("MCP status: the example app is listed", not e and f"example#{p.pid}" in m, m)
             e, m = await call("run", app="example", code="print('mcp')\n40 + 2")
@@ -45,7 +52,7 @@ async def _generic(p):
             e, m = await call("run", app="missing", code="1")
             check("MCP run: a missing app is isError", e and "is not running" in m, m)
             e, m = await call("run", app="example")
-            check("MCP run: a call without code is isError", e, m)
+            check("MCP run: a call without code is isError and says why", e and "give code or file" in m, m)
             e, m = await call("api_search", app="example", query="hello")
             check("MCP api_search", not e and "hello" in m, m)
             e, m = await call("view", app="example")
@@ -78,8 +85,8 @@ async def _blender_session():
             await o.initialize()
 
             async def call(name, **a):
-                y = await o.call_tool(name, a)
-                return y.isError, (y.content[0].text if y.content else "")
+                y = _wire(await o.call_tool(name, a))
+                return y.get("isError", False), (y["content"][0].get("text", "") if y.get("content") else "")
             t0 = time.time()
             e, m = await call("open", app="blender", background=True)
             elapsed = time.time() - t0
@@ -91,15 +98,17 @@ async def _blender_session():
             check("[mcp+blender] run: output + version", not e and "mcp" in m and "-> \"5." in m, m)
             e, m = await call("api_search", app=selector, query="bpy.ops.mesh.primitive_cube_add")
             check("[mcp+blender] api_search: the parameters come back", not e and "size: float" in m, m)
-            y = await o.call_tool("view", {"app": selector, "width": 320})
+            y = _wire(await o.call_tool("view", {"app": selector, "width": 320}))
+            c = y.get("content", [])
             check("[mcp+blender] view in the background returns a PNG image (the default 4 angles) followed by a one-line caption",
-                  not y.isError and y.content and y.content[0].type == "image" and y.content[0].mimeType == "image/png"
-                  and len(y.content) == 2 and y.content[1].type == "text" and "4 angles" in y.content[1].text, y)
-            y = await o.call_tool("view", {"app": selector, "width": 320, "shading": "wireframe", "angles": ["front", [1, 1, 0.5]], "target": ["Cube"]})
+                  not y.get("isError") and len(c) == 2 and c[0]["type"] == "image" and c[0]["mimeType"] == "image/png"
+                  and c[1]["type"] == "text" and "4 angles" in c[1]["text"], y)
+            y = _wire(await o.call_tool("view", {"app": selector, "width": 320, "shading": "wireframe", "angles": ["front", [1, 1, 0.5]], "target": ["Cube"]}))
+            c = y.get("content", [])
             check("[mcp+blender] view: shading, an angle name + an [x,y,z] direction and the target pass through MCP",
-                  not y.isError and y.content[0].type == "image" and "2 angles" in y.content[1].text and "shading=wireframe" in y.content[1].text, y)
-            y = await o.call_tool("view", {"app": selector, "width": 320, "shading": "nonsense"})
-            check("[mcp+blender] view: an invalid option is isError with an explanation", y.isError and "unknown shading" in y.content[0].text, y)
+                  not y.get("isError") and c[0]["type"] == "image" and "2 angles" in c[1]["text"] and "shading=wireframe" in c[1]["text"], y)
+            y = _wire(await o.call_tool("view", {"app": selector, "width": 320, "shading": "nonsense"}))
+            check("[mcp+blender] view: an invalid option is isError with an explanation", y.get("isError") and "unknown shading" in y["content"][0]["text"], y)
             e, m = await call("status")
             check("[mcp+blender] status: the daemon is listed", not e and selector in m, m)
             return int(selector.split("#")[1])

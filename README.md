@@ -20,7 +20,7 @@ to click and no add-on to install for the common case. It can also attach to a B
 ## Install
 
 Requirements: Python 3.10+, Blender, and the `mcp` and `Pillow` packages. Developed and tested on Windows 11 with Blender 5.2.4 LTS and Python 3.13. macOS and Linux are untested.
-Tether uses the MCP Python SDK 1.x (tested with 1.28). SDK 2.x renamed `FastMCP` and changed other APIs, so the install pins `mcp<2`.
+Tether runs on the MCP Python SDK 1.x (1.28 and later) and on 2.x with the same code: `tether/mcp_server.py` imports `MCPServer` (2.x) or `FastMCP` (1.x), whichever is installed. The install allows `mcp>=1.28,<3`; the full test suite passes with 1.30.0 and 2.3.0.
 
 ```powershell
 pip install git+https://github.com/B7Kompirine/blender-tether
@@ -107,11 +107,11 @@ If you work with GTA V assets through the [Sollumz](https://github.com/Sollumz/S
 ```powershell
 python tests/run_tests.py                     # engine, client, scripts, asset sources against a fake server (no Blender, no network)
 python tests/run_tests.py --mcp               # plus the MCP server through a stdio client
-python tests/run_tests.py --mcp --blender     # plus a real headless Blender (382 checks with Sollumz installed, about two minutes)
+python tests/run_tests.py --mcp --blender     # plus a real headless Blender (383 checks with Sollumz installed, about two minutes)
 python tests/run_tests.py --blender --gui     # also a windowed Blender: a window opens and takes focus
 ```
 
-The Blender groups analyse image pixels, so they need numpy: `pip install ".[test]"` from a checkout. The Sollumz checks run only when that add-on is available.
+The Blender groups analyse image pixels, so they need numpy: `pip install ".[test]"` from a checkout. The Sollumz checks run only when that add-on is available. The MCP groups use whichever SDK is installed: add `"mcp<2"` or `"mcp>=2"` to that command to pick the major.
 
 ## Limits
 
