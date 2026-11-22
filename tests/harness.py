@@ -19,8 +19,9 @@ sys.path.insert(0, str(ROOT))
 from tether import client  # noqa: E402
 from tether.agent import REGISTRY_DIR  # noqa: E402
 
+REAL_PYTHON = getattr(sys, "_base_executable", sys.executable)      # in a venv on Windows sys.executable is a launcher that starts the real interpreter as a child: its pid is not the agent's
 RESULTS = []
-STATE = {"sollumz": False}               # set by the Blender tests: the Sollumz (GTA) checks only run when the add-on is available
+STATE ={"sollumz": False}               # set by the Blender tests: the Sollumz (GTA) checks only run when the add-on is available
 for _stream in (sys.stdout, sys.stderr):      # the Windows console code page (cp1254, cp1252...) cannot write every character
     _stream.reconfigure(encoding="utf-8", errors="replace")
 
@@ -57,7 +58,7 @@ def kill_pid(pid):
 
 
 def start_app(name, mode="background"):
-    p = subprocess.Popen([sys.executable, str(ROOT / "tether" / "agent" / "example_app.py"), name, mode], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    p = subprocess.Popen([REAL_PYTHON, str(ROOT / "tether" / "agent" / "example_app.py"), name, mode], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     t0 = time.time()
     while time.time() - t0 < 10:
         if any(k["pid"] == p.pid for k in client.apps(prune=False)):

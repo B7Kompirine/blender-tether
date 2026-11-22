@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 
-from harness import REGISTRY_DIR, ROOT, TMP, check, client, start_app, fake_agent, write_registry
+from harness import REAL_PYTHON, REGISTRY_DIR, ROOT, TMP, check, client, start_app, fake_agent, write_registry
 
 
 def engine_and_client():
@@ -292,7 +292,7 @@ def lifecycle():
     example = str(ROOT / "tether" / "agent" / "example_app.py")
 
     def start(name, **env):
-        p = subprocess.Popen([sys.executable, example, name], env={**os.environ, **env}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        p = subprocess.Popen([REAL_PYTHON, example, name], env={**os.environ, **env}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         t0 = time.time()
         while time.time() - t0 < 10 and not any(k["pid"] == p.pid for k in client.apps(prune=False)):
             time.sleep(0.1)

@@ -20,6 +20,7 @@ to click and no add-on to install for the common case. It can also attach to a B
 ## Install
 
 Requirements: Python 3.10+, Blender, and the `mcp` and `Pillow` packages. Developed and tested on Windows 11 with Blender 5.2.4 LTS and Python 3.13. macOS and Linux are untested.
+Tether uses the MCP Python SDK 1.x (tested with 1.28). SDK 2.x renamed `FastMCP` and changed other APIs, so the install pins `mcp<2`.
 
 ```powershell
 pip install git+https://github.com/B7Kompirine/blender-tether
