@@ -106,7 +106,7 @@ If you work with GTA V assets through the [Sollumz](https://github.com/Sollumz/S
 ```powershell
 python tests/run_tests.py                     # engine, client, scripts, asset sources against a fake server (no Blender, no network)
 python tests/run_tests.py --mcp               # plus the MCP server through a stdio client
-python tests/run_tests.py --mcp --blender     # plus a real headless Blender (about 370 checks, one to two minutes)
+python tests/run_tests.py --mcp --blender     # plus a real headless Blender (382 checks with Sollumz installed, about two minutes)
 python tests/run_tests.py --blender --gui     # also a windowed Blender: a window opens and takes focus
 ```
 
